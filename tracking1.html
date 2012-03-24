@@ -1,0 +1,353 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<script type="text/javascript" src="Three.js"></script>
+		<script src="/socket.io/socket.io.js"></script>
+		<script type="text/javascript">
+		
+		var socket = io.connect('http://localhost');
+		socket.on('draw', function (data) {
+		  console.log(data);
+		  // socket.emit('my other event', { my: 'data' });
+	 	});
+		
+		function generateUID() {
+			return (Math.random().toString()).replace(/\./g,'').substring(0,10);
+		}
+		
+
+		function getUID() {
+			if( location.hash )
+				return location.hash.substring(1,99);
+			return '';
+		}
+		
+		function reportPosition(x,y,z) { 
+			console.log( JSON.stringify( { uid:getUID(), x:x, y:y, z:z } ) );
+			socket.emit( 'draw', { uid:getUID(), x:x, y:y, z:z } );
+		}
+
+		var cx=0,cy=0,cz=0;
+		var tx=0,ty=0,tz=0;
+		var dx=0,dy=0,dz=0;
+		
+		/*
+			var Cell = function() {
+				var el = document.createElement('li');;
+				return {
+					element: el,
+					audio: null,
+					audiodelay: 0,
+					lastvalue: 0,
+					value: 0,
+					sum: 0,
+					lastsum: 0,
+					diff: 0,
+					tick: function() {
+						this.diff = Math.abs(this.sum - this.lastsum);
+						this.lastsum = this.sum;
+						this.value *= 0.8;
+						this.value += this.diff;
+						if( this.value > 2.0 ) {
+							this.element.style.backgroundColor = '#f00';
+							if( this.audiodelay > 10 ) {
+								this.audio.load(); 
+								this.audio.play();
+								this.audiodelay = 0;
+							}
+						}
+						else
+							this.element.style.backgroundColor = '#ccc';
+						this.element.innerText = Math.round(this.value).toString();
+						this.audiodelay ++;
+					}
+				};
+			};
+				*/
+				
+			var video;
+			var el1,el2,el3,el4,el5,el6,el7,el8;
+			var c1,c2,c3,c4,c5,c6,c7,c8,width,height;
+			
+			function blur(work,temp)
+			{
+					var o = 0;
+					for( var j=0; j<30; j++)
+					{
+						for( var i=0; i<40; i++)
+						{
+							var avg = 0;
+							for( var r0=-2; r0<=2; r0++)
+							{		
+								for( var r1=-2; r1<=2; r1++)
+								{
+									var x2 = i + r1;
+									var y2 = j + r0;
+									if( y2 >= 0 && y2 < 30 && x2 >= 0 && x2 < 40 )
+										avg += work[4*(y2*40+x2)];
+								}
+							}
+							avg /= 5*5;
+							o = 4*(j*40+i);
+							temp[o] = avg;
+							temp[o+1] = avg;
+							temp[o+2] = avg;
+						} 
+					}
+
+					o = 0;
+					for( var j=0; j<30; j++)
+					{					
+						for( var i=0; i<40; i++)
+						{
+							work[o+0] = temp[o+0];
+							work[o+1] = temp[o+1];
+							work[o+2] = temp[o+2];
+							o += 4;
+						}
+					}
+			}
+			
+			function update() {
+				
+			    c2.drawImage(el1,0,0);
+				c1.drawImage(video,0,0,width,height);
+				
+			    var imageData = c1.getImageData(0,0,width,height);
+			 	var lastData = c2.getImageData(0,0,width,height);
+				var diffData = c3.getImageData(0,0,width,height);
+
+				var o = 0;
+				for( var j=0; j<width*height; j++)
+				{
+					var mmm = 
+						(imageData.data[o] - lastData.data[o]) +
+						(imageData.data[o+1] - lastData.data[o+1]) +
+						(imageData.data[o+2] - lastData.data[o+2]);
+						
+				//	mmm *= 5;
+					mmm = Math.min( 255, Math.max( 0, mmm ));
+
+					diffData.data[o] = mmm;
+					diffData.data[o+1] = mmm;
+					diffData.data[o+2] = mmm;
+					diffData.data[o+3] = 255;
+					o += 4;
+				}
+				c3.putImageData(diffData,0,0);
+				c4.drawImage( el3, 40,0,-40,30 );
+				
+				imageData = c4.getImageData(0,0,40,30);
+			 	lastData = c5.getImageData(0,0,40,30);
+				var finalData = c6.getImageData(0,0,40,30);
+			
+				blur( imageData, finalData );
+			
+				var o = 0;
+				for( var j=0; j<width*height; j++)
+				{
+					var mmm = (lastData.data[o] + lastData.data[o+1] + lastData.data[o+2]) / 3;
+					mmm *= 0.2;
+					
+					var add = (imageData.data[o] + imageData.data[o+1] + imageData.data[o+2]) / 3;
+					add *= 0.8;
+					
+					mmm += add;
+					
+					mmm = Math.min( 255, Math.max( 0, mmm ));
+
+					lastData.data[o] = mmm;
+					lastData.data[o+1] = mmm;
+					lastData.data[o+2] = mmm;
+					lastData.data[o+3] = 255;
+
+					mmm = mmm > 120 ? 0 : 255;
+					finalData.data[o] = mmm;
+					finalData.data[o+1] = mmm;
+					finalData.data[o+2] = mmm;
+					finalData.data[o+3] = 255;
+					o += 4;
+				}
+
+				var lx=100,ly=100,rx=0,ry=0;
+				o = 0;
+				for( var j=0; j<30; j++)
+					for( var i=0; i<40; i++)
+					{
+						var on = finalData.data[o] < 128;
+						if( on ) {
+							if( i < lx ) lx = i;
+							if( i > rx ) rx = i;
+							if( j < ly ) ly = j;
+							if( j > ry ) ry = j;
+							//	finalData.data[o] = on ? 255: 0;
+						}
+						o += 4;
+					}
+					
+			//	console.log(lx,ly,rx,ry);
+				
+				c5.putImageData(lastData,0,0);
+				c6.putImageData(finalData,0,0);
+
+				tx = 20;
+				ty = 15;		
+				tz = 0;
+				on = false;		
+				if( rx > lx && ry > ly ) {
+					// ON
+					on = true;
+					c6.strokeStyle = "rgb(255,0,0);";
+					c6.strokeRect( lx, ly, rx-lx, ry-ly );
+					
+					tx = (rx + lx) / 2;
+					ty = (ry + ly) / 2;
+					tz = ((rx - lx) + (ry - ly)) / 3;
+				}
+				
+				dx = (dx * 0.1) + ((tx - cx) * 0.9);
+				dy = (dy * 0.1) + ((ty - cy) * 0.9);
+				dz = (dz * 0.1) + ((tz - cz) * 0.9);
+				cx += dx;
+				cy += dy;
+				cz += dz;
+				// cx = tx;
+				// cy = ty;
+				
+				if( on )
+					reportPosition( -1 + cx/20.0, -1 + cy/15.0, cz/40.0 );
+				
+				var ux = cx * 10;
+				var uy = cy * 10;
+				var uz = cz * 10;
+				
+				// draw upscaled
+				c7.drawImage( el6, 0,0,400,300 );
+				
+				c7.strokeStyle = "rgb(128,128,128);";								
+				c7.beginPath();  
+				c7.moveTo( ux, 0 );  
+				c7.lineTo( ux, 1000 );
+				c7.moveTo( 0, uy );  
+				c7.lineTo( 1000, uy );  
+				
+				c7.moveTo( ux-uz, uy-uz );  
+				c7.lineTo( ux+uz, uy-uz );  
+				c7.lineTo( ux+uz, uy+uz );  
+				c7.lineTo( ux-uz, uy+uz );  
+				c7.lineTo( ux-uz, uy-uz );  
+				
+				c7.stroke();  
+
+			}	
+
+	   
+
+				function gotStream(stream) {
+  					console.log('Got video!' );
+				 	video = document.getElementById('source');
+					if (navigator.getUserMedia) {
+    					video.src = stream;
+					} else {
+					    video.src = webkitURL.createObjectURL(stream);
+					}
+					setInterval(function(){
+						update();
+					}, 20);
+				}
+				
+				function noStream() {
+					document.getElementById('errorMessage').textContent = 'No camera available.';
+					animate();
+				}
+				
+				var inited = false;
+					
+				window.onload = function() {	
+					if( inited )
+						return;
+					inited = true;
+					
+					var uid = getUID();
+					if( uid === '' ) 
+					{
+						uid = generateUID();
+						location = '#'+uid;
+						return;
+					}
+					
+					console.log('onload.');				
+					
+					width = 160;
+					height = 120;
+
+					el1 = document.getElementById("c1");
+				    c1 = el1.getContext("2d");
+				    
+				    el2 = document.getElementById("c2");
+				    c2 = el2.getContext("2d");
+				    
+				    el3 = document.getElementById("c3");
+				    c3 = el3.getContext("2d");
+				  
+				    el4 = document.getElementById("c4");
+				    c4 = el4.getContext("2d");
+				  
+				    el5 = document.getElementById("c5");
+				    c5 = el5.getContext("2d");
+				    c5.fillStyle = "rgb(0,0,0)";  
+ 					c5.fillRect (0, 0, 40, 30);
+  			    
+					el6 = document.getElementById("c6");
+				    c6 = el6.getContext("2d");
+				
+					el7 = document.getElementById("c7");
+				    c7 = el7.getContext("2d");
+				  
+				  
+				  //	document.getElementById('go').addEventListener('click',function(){
+						if( navigator.webkitGetUserMedia ) 
+							navigator.webkitGetUserMedia( "audio, video", gotStream, noStream );
+						else if( navigator.getUserMedia ) 
+							navigator.getUserMedia( { audio: true, video: true }, gotStream, noStream );
+						else if( navigator.oGetUserMedia ) 
+							navigator.oGetUserMedia( { audio: true, video: true }, gotStream, noStream );
+						else if( navigator.msGetUserMedia ) 
+							navigator.msGetUserMedia( { audio: true, video: true }, gotStream, noStream );
+						else
+						noStream();
+				  //	});
+				};
+				
+		</script>
+		<style>
+		
+		ul#blocks { display: block; list-style: none; margin: 0; padding: 0; }
+		ul#blocks li { display: block; width: 40px; height: 40px; border: 1px solid #f0f; float: left; margin: 0; padding: 0; }
+		
+		</style>
+	</head>
+	<body>
+		
+		<canvas id="c7" width="400" height="300"></canvas>
+		<br/>
+		 
+		<button id="go">Sausages!</button>
+		<br/>
+		 
+		<canvas id="c4" width="40" height="30" style="width:200px;height:150px;"></canvas>
+		<canvas id="c5" width="40" height="30" style="width:200px;height:150px;"></canvas>
+		<canvas id="c6" width="40" height="30" style="width:200px;height:150px;"></canvas>
+		<br/>
+		
+		<canvas id="c1" width="160" height="120"></canvas> 
+		<canvas id="c2" width="160" height="120"></canvas> 
+		<canvas id="c3" width="160" height="120"></canvas>
+		<video id="source" autoplay audio=muted width=160 height=120></video><br/>
+		<ul id="blocks"></ul> <br/>
+		<hr/>
+		<div id="debug"></div>
+		<div id="errorMessage"></div><br/>
+		<hr/>
+	</body>
+</html>
